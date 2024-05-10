@@ -39,3 +39,44 @@
     transform: rotate(360deg);
   }
 }
+.modal-overlay {
+  position: fixed;
+  z-index: 10;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 50%;
+  background-color: white;
+  border-radius: 10px;
+  border: 1px solid black;
+  /* background-color: rgba(0, 0, 0, 0.5); */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  /* width: 300px; */
+  /* height: 300px; */
+  padding: 20px;
+  background-color: white;
+  border-radius: 8px;
+}
+
+.modal-title {
+  font-size: 1.2rem;
+  margin-bottom: 10px;
+}
+
+.modal-message {
+  margin-bottom: 20px;
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: center;
+}
+
+.modal-buttons button {
+  margin-left: 10px;
+}

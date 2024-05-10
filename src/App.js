@@ -1,58 +1,45 @@
 import React, { useEffect, useState } from "react";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  setDoc,
-} from "firebase/firestore";
-import "./App.css";
+import { addDoc, collection, doc, getDocs, setDoc, deleteDoc } from "firebase/firestore";
+import "./App.css"; // You can define custom CSS styles for the modal
 import db from "./firebase";
-import { v4 as uuidv4 } from "uuid";
 
 function App() {
   const [users, setUsers] = useState([]);
-  const [counter, setCounter] = useState(1); // Counter variable for generating IDs
   const [formData, setFormData] = useState({
     name: "",
     gender: "",
     roles: [],
   });
-
   const [editingUserId, setEditingUserId] = useState(null);
-  const [deleteUserId, setDeleteUserId] = useState(null);
-
+  const [deleteUserId, setDeleteUserId] = useState(null); // State to store user ID for deletion
+  const [showModal, setShowModal] = useState(false);
+  
   useEffect(() => {
     const fetchUsersFromFirestore = async () => {
       try {
         const colRef = collection(db, "users");
         const snapshot = await getDocs(colRef);
-        const userData = snapshot.docs.map((doc) => ({
-          id: parseInt(doc.id), // Parse ID to integer
-          ...doc.data(),
-        }));
-        console.log("Fetched users:", userData);
+        const userData = snapshot.docs.map((doc) => {
+          const id = doc.id;
+          const data = {
+            id,
+            ...doc.data(),
+          };
+          return data;
+        });
         setUsers(userData);
-
-        // Determine the maximum ID value
-        const maxId = userData.reduce((max, user) => Math.max(max, user.id), 0);
-        // Set counter to start from the maximum ID value + 1
-        setCounter(maxId + 1);
       } catch (error) {
         console.error("Error fetching users: ", error);
       }
     };
-
     fetchUsersFromFirestore();
   }, []);
 
   const addUserToFirestore = async (formData) => {
     try {
-      const id = editingUserId ? editingUserId : uuidv4();
-      await setDoc(doc(db, "users", id.toString()), formData);
-      console.log("Document written with ID: ", id);
-      return id;
+      const docRef = await addDoc(collection(db, "users"), formData);
+      console.log("Document written with ID: ", docRef.id);
+      return docRef.id;
     } catch (error) {
       console.error("Error adding document: ", error);
       return null;
@@ -62,7 +49,6 @@ function App() {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     if (type === "checkbox") {
-      // If checkbox, handle selection
       if (checked) {
         setFormData({
           ...formData,
@@ -75,7 +61,6 @@ function App() {
         });
       }
     } else {
-      // For other inputs, update form data
       setFormData({
         ...formData,
         [name]: value,
@@ -86,26 +71,43 @@ function App() {
   const handleEdit = (userId) => {
     const userToEdit = users.find((user) => user.id === userId);
     if (userToEdit) {
+      setEditingUserId(userId);
       setFormData({
         name: userToEdit.name,
         gender: userToEdit.gender,
         roles: userToEdit.roles,
       });
-      setEditingUserId(userId);
+    } else {
+      console.error("User not found for editing");
     }
   };
 
-  const handleDelete = async (userId) => {
-    setDeleteUserId(userId);
+  const handleCancel = () => {
+    setEditingUserId(null);
+    setFormData({
+      name: "",
+      gender: "",
+      roles: [],
+    });
   };
 
-  const confirmDelete = async () => {
+  const handleOpenModal = () => {
+    setShowModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+  };
+
+  const handleDelete = async () => {
     try {
+      // Delete the user from the Firestore database
       await deleteDoc(doc(db, "users", deleteUserId));
+      // Remove the user from the local state
       const updatedUsers = users.filter((user) => user.id !== deleteUserId);
       setUsers(updatedUsers);
-      setDeleteUserId(null); // Reset deleteUserId after deletion
-      console.log("User deleted successfully");
+      // Close the modal
+      setShowModal(false);
     } catch (error) {
       console.error("Error deleting user: ", error);
     }
@@ -113,6 +115,11 @@ function App() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!formData.name || !formData.gender || formData.roles.length === 0) {
+      alert("Please fill out all required fields.");
+      return;
+    }
 
     const filteredFormData = Object.entries(formData).reduce(
       (acc, [key, value]) => {
@@ -124,16 +131,31 @@ function App() {
       {}
     );
 
-    console.log("Form data:", filteredFormData);
-    // Here you can send the filtered form data to Firebase or perform other operations
-    const docId = await addUserToFirestore(formData);
-    if (docId) {
-      // Fetch the updated user data and set it to the state
-      const updatedUsers = [...users, { id: counter, ...formData }];
-      setUsers(updatedUsers);
-      setCounter(counter + 1); // Increment the counter after adding a new user
-      setEditingUserId(null); // Reset editingUserId after adding or updating user
+    if (editingUserId) {
+      try {
+        await setDoc(doc(db, "users", editingUserId), filteredFormData);
+        const updatedUsers = users.map((user) =>
+          user.id === editingUserId
+            ? { id: editingUserId, ...filteredFormData }
+            : user
+        );
+        setUsers(updatedUsers);
+        setEditingUserId(null);
+      } catch (error) {
+        console.error("Error updating user details in Firestore: ", error);
+      }
+    } else {
+      const docId = await addUserToFirestore(filteredFormData);
+      if (docId) {
+        const updatedUsers = [...users, { id: docId, ...filteredFormData }];
+        setUsers(updatedUsers);
+      }
     }
+    setFormData({
+      name: "",
+      gender: "",
+      roles: [],
+    });
   };
 
   return (
@@ -177,7 +199,6 @@ function App() {
           </select>
         </div>
         <div className="mb-3 d-flex justify-content-between">
-          {/* Role checkboxes */}
           <div className="">
             <label htmlFor="PrimeAdmin" className="form-check-label font-size">
               <input
@@ -236,20 +257,18 @@ function App() {
           </div>
         </div>
         <button type="submit" className="btn btn-primary">
-          Submit
+          {editingUserId ? "Save" : "Submit"}
         </button>
         {editingUserId && (
           <button
             type="button"
-            className="btn btn-success"
-            onClick={handleSubmit}
+            className="btn btn-secondary ms-3"
+            onClick={handleCancel}
           >
-            Save
+            Cancel
           </button>
         )}
       </form>
-
-      {/* Table data */}
 
       <h3 className="mt-5">Table data</h3>
       <table className="table table-hover">
@@ -263,9 +282,9 @@ function App() {
           </tr>
         </thead>
         <tbody>
-          {users.map((user) => (
+          {users.map((user, index) => (
             <tr key={user.id}>
-              <th scope="row">{user.id}</th>
+              <th scope="row">{index + 1}</th>
               <td>{user.name}</td>
               <td>{user.gender}</td>
               <td>{user.roles.join(", ")}</td>
@@ -278,7 +297,10 @@ function App() {
                 </button>
                 <button
                   className="btn btn-danger"
-                  onClick={() => handleDelete(user.id)}
+                  onClick={() => {
+                    setDeleteUserId(user.id);
+                    setShowModal(true);
+                  }}
                 >
                   Delete
                 </button>
@@ -288,12 +310,16 @@ function App() {
         </tbody>
       </table>
 
-      {deleteUserId && (
-        <div className="modal">
+      {/* Confirmation Modal */}
+      {showModal && (
+        <div className="modal-overlay">
           <div className="modal-content">
-            <p>Are you sure you want to delete this user?</p>
-            <button className="btn btn-danger" onClick={confirmDelete}>Delete</button>
-            <button className="btn btn-secondary" onClick={() => setDeleteUserId(null)}>Cancel</button>
+            <h2 className="modal-title">Delete User</h2>
+            <p className="modal-message">Are you sure you want to delete this user?</p>
+            <div className="modal-buttons">
+              <button onClick={handleCloseModal} className="btn btn-secondary">Close</button>
+              <button onClick={handleDelete}className="btn btn-primary">Yes</button>
+            </div>
           </div>
         </div>
       )}
